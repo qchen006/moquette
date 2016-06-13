@@ -18,7 +18,7 @@ public class HazelcastMap {
 	 * start the function N times, N equals to the local variable totalInstance 
 	 * @throws InterruptedException
 	 */
-	@Test
+//	@Test
 	public void testMapConcurrency() throws InterruptedException {
 		int totalTimes = 1000;
 		int totalInstance = 2;
@@ -42,32 +42,35 @@ public class HazelcastMap {
 	}
 
 	static class Value implements Serializable {
-		public int amount;
+		public int amount = 0;
 	}
 	
 	
 	@Test
 	public void testMapConcurrencyLock() throws InterruptedException {
-		int totalTimes = 1000;
+		int totalTimes = 100;
 		int totalInstance = 2;
 		
 		HazelcastInstance hz = Hazelcast.newHazelcastInstance();
         IMap<String, Value> map = hz.getMap( "map2" );
-        String key = "1";
+        String key = "2";
         map.put( key, new Value() );
         System.out.println( "Starting" );
         for ( int k = 0; k < totalTimes; k++ ) {
-            map.lock( key );
+        	map.lock( key );
             try {
                 Value value = map.get( key );
                 Thread.sleep( 10 );
                 value.amount++;
                 map.put( key, value );
             } finally {
-                map.unlock( key );
+            	map.unlock( key );
             }
         }
+        
         System.out.println( "Finished! Result = " + map.get( key ).amount );
+        
+        Thread.sleep(10000);
 	}
 	
 	

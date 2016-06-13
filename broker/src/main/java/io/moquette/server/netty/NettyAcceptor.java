@@ -23,6 +23,7 @@ import io.moquette.parser.netty.MQTTEncoder;
 import io.moquette.spi.security.ISslContextCreator;
 import io.moquette.server.ServerAcceptor;
 import io.moquette.server.config.IConfig;
+import io.moquette.server.ha.HAConstants;
 import io.moquette.server.netty.metrics.*;
 import io.moquette.spi.impl.ProtocolProcessor;
 import io.netty.bootstrap.ServerBootstrap;
@@ -41,11 +42,15 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.Future;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.hazelcast.core.Hazelcast;
+
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+
 import java.io.IOException;
 import java.util.List;
 
@@ -112,6 +117,10 @@ public class NettyAcceptor implements ServerAcceptor {
             initializeSSLTCPTransport(handler, props, sslContext);
             initializeWSSTransport(handler, props, sslContext);
         }
+        String haStr = props.getProperty(HAConstants.ENABLE_HA); 
+        if (Boolean.parseBoolean(haStr)) {
+			Hazelcast.newHazelcastInstance();
+		}
     }
 
     private void initFactory(String host, int port, final PipelineInitializer pipeliner) {
