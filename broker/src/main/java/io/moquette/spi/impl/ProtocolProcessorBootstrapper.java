@@ -16,6 +16,7 @@
 package io.moquette.spi.impl;
 
 import io.moquette.BrokerConstants;
+import io.moquette.server.Server;
 import io.moquette.spi.IMessagesStore;
 import io.moquette.interception.InterceptHandler;
 import io.moquette.server.config.IConfig;
@@ -29,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.text.ParseException;
@@ -36,16 +38,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- *
- * Singleton class that orchestrate the execution of the protocol.
- *
- * It's main responsibility is instantiate the ProtocolProcessor.
+ * It's main responsibility is bootstrap the ProtocolProcessor.
  *
  * @author andrea
  */
-public class SimpleMessaging {
+public class ProtocolProcessorBootstrapper {
 
-    private static final Logger LOG = LoggerFactory.getLogger(SimpleMessaging.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ProtocolProcessorBootstrapper.class);
 
     private SubscriptionsStore subscriptions;
 
@@ -53,18 +52,9 @@ public class SimpleMessaging {
 
     private BrokerInterceptor m_interceptor;
 
-    private static SimpleMessaging INSTANCE;
-    
     private final ProtocolProcessor m_processor = new ProtocolProcessor();
 
-    private SimpleMessaging() {
-    }
-
-    public static SimpleMessaging getInstance() {
-        if (INSTANCE == null) {
-            INSTANCE = new SimpleMessaging();
-        }
-        return INSTANCE;
+    public ProtocolProcessorBootstrapper() {
     }
 
     /**
@@ -79,7 +69,7 @@ public class SimpleMessaging {
      *                      and fallback on the default one (permit all).
      * */
     public ProtocolProcessor init(IConfig props, List<? extends InterceptHandler> embeddedObservers,
-                                  IAuthenticator authenticator, IAuthorizator authorizator) {
+                                  IAuthenticator authenticator, IAuthorizator authorizator, Server server) {
         subscriptions = new SubscriptionsStore();
 
         m_mapStorage = new MapDBPersistentStore(props);
@@ -88,10 +78,16 @@ public class SimpleMessaging {
         ISessionsStore sessionsStore = m_mapStorage.sessionsStore(messagesStore);
 
         List<InterceptHandler> observers = new ArrayList<>(embeddedObservers);
-        String interceptorClassName = props.getProperty("intercept.handler");
+        String interceptorClassName = props.getProperty(BrokerConstants.INTERCEPT_HANDLER_PROPERTY_NAME);
         if (interceptorClassName != null && !interceptorClassName.isEmpty()) {
             try {
-                InterceptHandler handler = Class.forName(interceptorClassName).asSubclass(InterceptHandler.class).newInstance();
+                InterceptHandler handler;
+                try {
+                    final Constructor<? extends InterceptHandler> constructor = Class.forName(interceptorClassName).asSubclass(InterceptHandler.class).getConstructor(Server.class);
+                    handler = constructor.newInstance(server);
+                } catch (NoSuchMethodException nsme){
+                    handler = Class.forName(interceptorClassName).asSubclass(InterceptHandler.class).newInstance();
+                }
                 observers.add(handler);
             } catch (Throwable ex) {
                 LOG.error("Can't load the intercept handler {}", ex);
@@ -143,7 +139,8 @@ public class SimpleMessaging {
         }
 
         boolean allowAnonymous = Boolean.parseBoolean(props.getProperty(BrokerConstants.ALLOW_ANONYMOUS_PROPERTY_NAME, "true"));
-        m_processor.init(subscriptions, messagesStore, sessionsStore, authenticator, allowAnonymous, authorizator, m_interceptor);
+        boolean allowZeroByteClientId = Boolean.parseBoolean(props.getProperty(BrokerConstants.ALLOW_ZERO_BYTE_CLIENT_ID_PROPERTY_NAME, "false"));
+        m_processor.init(subscriptions, messagesStore, sessionsStore, authenticator, allowAnonymous, allowZeroByteClientId, authorizator, m_interceptor, props.getProperty(BrokerConstants.PORT_PROPERTY_NAME));
         return m_processor;
     }
     
